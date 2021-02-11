@@ -33,7 +33,24 @@ class HTTPResponse(object):
         self.body = body
 
 class HTTPClient(object):
-    #def get_host_port(self,url):
+
+    '''
+    helper function return, the host name and port number, path
+    '''
+    def get_host_port_path(self, url):
+        # we can use cppy.deepcoy ?
+        o = urllib.parse.urlparse(url)
+        if o.port == None:
+            port = 80
+        else :
+            port = o.port
+
+        path = o.path
+        if path == "":
+          path = "/"
+
+        print(o)
+        return o.hostname, port, path
 
     def connect(self, host, port):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -41,19 +58,34 @@ class HTTPClient(object):
         return None
 
     def get_code(self, data):
-        return None
+        split_array = data.split('\r\n\r\n')
+        protocal_status_info = split_array[0].split()
 
-    def get_headers(self,data):
-        return None
+        return int(protocal_status_info[1])
 
+    # helper funciton, design for build body for content
+    def build_send_body(self, args):
+        send_body = ""
+        if args != None:
+            last_key = list(args)[-1]
+            for key, value in args.items():
+                if key != last_key:
+                    send_body = send_body + key + "=" + value + "&"
+                else:
+                    send_body = send_body + key + "=" + value
+
+        return send_body
+        
     def get_body(self, data):
-        return None
+        return data.split('\r\n\r\n', 1)[1]
     
     def sendall(self, data):
         self.socket.sendall(data.encode('utf-8'))
+        print("data sent successfully")
         
     def close(self):
         self.socket.close()
+        print("socket shut down")
 
     # read everything from the socket
     def recvall(self, sock):
@@ -67,15 +99,62 @@ class HTTPClient(object):
                 done = not part
         return buffer.decode('utf-8')
 
+
     def GET(self, url, args=None):
+
         code = 500
         body = ""
+
+        host, port, path = self.get_host_port_path(url)
+        # connect to the host
+        self.connect(host, port)
+        message = "GET " + path +" HTTP/1.1\r\n"
+        message = message + "Host: " + host + "\r\nConnection: close\r\n\r\n" # headers end ,body end 
+
+        self.sendall(message)
+        data = self.recvall(self.socket)
+
+        print(" - Response data -")
+        print(data)
+        print ("-- Response data --")
+
+        code = self.get_code(data)
+        body = self.get_body(data)
+
+
+        # close before we exit 
+        self.close() 
+
+        
         return HTTPResponse(code, body)
 
     def POST(self, url, args=None):
         code = 500
         body = ""
+        host, port, path = self.get_host_port_path(url)
+        # connect to the host
+        self.connect(host, port)
+
+        send_body = self.build_send_body(args)
+
+        message = "POST " + path +" HTTP/1.1\r\n"       
+        message = message + "Host: " + host + "\r\nConnection: close\r\n" + "Content-Type: application/x-www-form-urlencoded\r\n"
+        message = message + "Content-Length: " + str(len(send_body)) + "\r\n\r\n" #head end
+        message = message + send_body  #body end
+
+        self.sendall(message)
+        data = self.recvall(self.socket)
+
+        print(" - Response data -")
+        print(data)
+        print ("-- Response data --")
+        code = self.get_code(data)
+        body = self.get_body(data)
+
+        # close before we exit 
+        self.close() 
         return HTTPResponse(code, body)
+
 
     def command(self, url, command="GET", args=None):
         if (command == "POST"):
